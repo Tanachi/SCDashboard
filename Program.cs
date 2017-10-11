@@ -17,11 +17,9 @@ namespace SCDashboard
             // Gets info from App.config
             var userid = ConfigurationManager.AppSettings["user"];
             var passwd = ConfigurationManager.AppSettings["pass"];
-            var port = ConfigurationManager.AppSettings["port"];
             var storyID = ConfigurationManager.AppSettings["story"];
             var team = ConfigurationManager.AppSettings["team"];
-            var cost = ConfigurationManager.AppSettings["cost"];
-            var sc = new SharpCloudApi(userid, passwd);
+            var enterprise = ConfigurationManager.AppSettings["enterprise"];
             // Gets Story ID from URL
             string storyUrl = "";
             MatchCollection matchUrl = Regex.Matches(storyID, @"story\/(.+)\/view");
@@ -36,6 +34,7 @@ namespace SCDashboard
                 storyUrl = storyID;
             }
             // Sets the team stories and the dash board story
+            var sc = new SharpCloudApi(userid, passwd);
             var teamBook = sc.StoriesTeam(team);
             var dashStory = sc.LoadStory(storyUrl);
             // Adds new attributes if story does not have it
@@ -45,15 +44,20 @@ namespace SCDashboard
                 dashStory.Attribute_Add("RAG Status", SC.API.ComInterop.Models.Attribute.AttributeType.List);
             if (dashStory.Attribute_FindByName("New Requested Budget") == null)
                 dashStory.Attribute_Add("New Requested Budget", SC.API.ComInterop.Models.Attribute.AttributeType.Numeric);
-
-            //Selected Roadmaps to insert into dashboard
-            foreach(var teamStory in teamBook)
+            if (dashStory.Attribute_FindByName("Project Business Value") == null)
+                dashStory.Attribute_Add("Project Business Value", SC.API.ComInterop.Models.Attribute.AttributeType.Text);
+            if (dashStory.Attribute_FindByName("Project Dependencies/Assumptions/Risks") == null)
+                dashStory.Attribute_Add("Project Dependencies/Assumptions/Risks", SC.API.ComInterop.Models.Attribute.AttributeType.Text);
+            if (dashStory.Attribute_FindByName("Total Spent to Date") == null)
+                dashStory.Attribute_Add("Total Spent to Date", SC.API.ComInterop.Models.Attribute.AttributeType.Numeric);
+     //Selected Roadmaps to insert into dashboard
+            foreach (var teamStory in teamBook)
             {
                 Story story = sc.LoadStory(teamStory.Id);
                 if(story.Attribute_FindByName("Appropriated Budget") != null && story.Attribute_FindByName("New Requested Budget") != null)
                 {
                     Console.WriteLine("Reading " + story.Name);
-                    highCost(story, dashStory, false);
+                    highCost(story, dashStory, false, false);
                 }
                 else
                 {
@@ -64,7 +68,7 @@ namespace SCDashboard
             Console.WriteLine("Saving Dashboard");
             dashStory.Save();
         }
-        static void highCost(Story story, Story newStory, bool isListed)
+        static void highCost(Story story, Story newStory, bool isBilled, bool cio)
         {
             String catName = "";
             String newCat = "";
@@ -87,21 +91,45 @@ namespace SCDashboard
             // Copies attribute data from team story to dashboard story
             foreach (var item in story.Items)
             {
-                //if(item.getAttributeValueAsText("Attribute Check") !=null)
-                //  isListed = true;
                 double checkBudget = item.GetAttributeValueAsDouble(story.Attribute_FindByName("Appropriated Budget"));
-                if (item.Category.Name == catName && checkBudget > 1000000 || isListed == true)
+                if (item.Category.Name == catName && checkBudget > 1000000 || isBilled == true || cio == true)
                 {
                     Item scItem = newStory.Item_AddNew(item.Name);
                     scItem.Category = newStory.Category_FindByName(newCat);
                     scItem.StartDate = Convert.ToDateTime(item.StartDate.ToString());
                     scItem.DurationInDays = item.DurationInDays;
-                    double appBudget = item.GetAttributeValueAsDouble(story.Attribute_FindByName("Appropriated Budget"));
-                    double newBudget = item.GetAttributeValueAsDouble(story.Attribute_FindByName("New Requested Budget"));
-                    var RAG = item.GetAttributeValueAsText(story.Attribute_FindByName("RAG Status"));
-                    scItem.SetAttributeValue(newStory.Attribute_FindByName("Appropriated Budget"), appBudget);
-                    scItem.SetAttributeValue(newStory.Attribute_FindByName("New Requested Budget"), newBudget);
-                    scItem.SetAttributeValue(newStory.Attribute_FindByName("RAG Status"), RAG);
+                    scItem.Description = item.Description;
+                    // Get values from story
+                    if(item.GetAttributeValueAsDouble(story.Attribute_FindByName("Appropriated Budget")) != null)
+                    {
+                        double appBudget = item.GetAttributeValueAsDouble(story.Attribute_FindByName("Appropriated Budget"));
+                        scItem.SetAttributeValue(newStory.Attribute_FindByName("Appropriated Budget"), appBudget);
+                    }
+                    if (item.GetAttributeValueAsDouble(story.Attribute_FindByName("New Requested Budget")) != null)
+                    {
+                        double newBudget = item.GetAttributeValueAsDouble(story.Attribute_FindByName("New Requested Budget"));
+                        scItem.SetAttributeValue(newStory.Attribute_FindByName("New Requested Budget"), newBudget);
+                    }
+                    if(item.GetAttributeValueAsText(story.Attribute_FindByName("RAG Status")) != null)
+                    {
+                        string RAG = item.GetAttributeValueAsText(story.Attribute_FindByName("RAG Status"));
+                        scItem.SetAttributeValue(newStory.Attribute_FindByName("RAG Status"), RAG);
+                    }
+                    if (item.GetAttributeValueAsText(story.Attribute_FindByName("Project Business Value")) != null)
+                    {
+                        string value = item.GetAttributeValueAsText(story.Attribute_FindByName("Project Business Value"));
+                        scItem.SetAttributeValue(newStory.Attribute_FindByName("Project Business Value"), value);
+                    }
+                    if (item.GetAttributeValueAsText(story.Attribute_FindByName("Project Dependencies/Assumptions/Risks")) != null)
+                    {
+                        string risks = item.GetAttributeValueAsText(story.Attribute_FindByName("Project Dependencies/Assumptions/Risks"));
+                        scItem.SetAttributeValue(newStory.Attribute_FindByName("Project Dependencies/Assumptions/Risks"), risks);
+                    }
+                    if (item.GetAttributeValueAsDouble(story.Attribute_FindByName("Project Dependencies/Assumptions/Risks")) != null)
+                    {
+                        double total = item.GetAttributeValueAsDouble(story.Attribute_FindByName("Total Spent to Date"));
+                        scItem.SetAttributeValue(newStory.Attribute_FindByName("Total Spent to Date"), total);
+                    }
                 }
             }
             newStory.Save();
