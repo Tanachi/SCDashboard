@@ -21,8 +21,7 @@ namespace SCDashboard
             var storyID = ConfigurationManager.AppSettings["story"];
             var team = ConfigurationManager.AppSettings["team"];
             var cost = ConfigurationManager.AppSettings["cost"];
-            var URL = "https://my.sharpcloud.com";
-            var sc = new SharpCloudApi(userid, passwd, URL);
+            var sc = new SharpCloudApi(userid, passwd);
             // Gets Story ID from URL
             string storyUrl = "";
             MatchCollection matchUrl = Regex.Matches(storyID, @"story\/(.+)\/view");
@@ -40,67 +39,32 @@ namespace SCDashboard
             var teamBook = sc.StoriesTeam(team);
             var dashStory = sc.LoadStory(storyUrl);
             // Adds new attributes if story does not have it
-            if(dashStory.Attribute_FindByName("Appropriated Budget") == null)
+            if (dashStory.Attribute_FindByName("Appropriated Budget") == null)
                 dashStory.Attribute_Add("Appropriated Budget", SC.API.ComInterop.Models.Attribute.AttributeType.Numeric);
             if (dashStory.Attribute_FindByName("RAG Status") == null)
                 dashStory.Attribute_Add("RAG Status", SC.API.ComInterop.Models.Attribute.AttributeType.List);
             if (dashStory.Attribute_FindByName("New Requested Budget") == null)
                 dashStory.Attribute_Add("New Requested Budget", SC.API.ComInterop.Models.Attribute.AttributeType.Numeric);
-            
-            
 
-            
             //Selected Roadmaps to insert into dashboard
-            int[] maps = new int[4];
-            maps[0] = 1;
-            maps[1] = 3;
-            maps[2] = 4;
-            maps[3] = 5;
-            // Goes through each roadmap to insert data into dashboard
-            for(var i = 0; i < maps.Length; i++)
+            foreach(var teamStory in teamBook)
             {
-                // Loads current story
-                var storyGet = teamBook[maps[i]].Id;
-                var story = sc.LoadStory(storyGet);
-                String catName = "";
-                String newCat = "";
-                // Finds the category that contains the project
-                foreach (var cat in story.Categories)
+                Story story = sc.LoadStory(teamStory.Id);
+                if(story.Attribute_FindByName("Appropriated Budget") != null && story.Attribute_FindByName("New Requested Budget") != null)
                 {
-                    var catLine = cat.Name.Split(' ');
-                    // Checks to see if last word is project, if so, adds the other words to be a category for the dashboard
-                    if (catLine[catLine.Length - 1] == "Projects")
-                    {
-                        catName = cat.Name;
-                        String[] noProject = new String[catLine.Length - 1];
-                        Array.Copy(catLine, noProject, catLine.Length - 1);
-
-                        newCat = String.Join(" ", noProject);
-                        dashStory.Category_AddNew(newCat);
-                    }
+                    Console.WriteLine("Reading " + story.Name);
+                    highCost(story, dashStory, false);
                 }
-                // Copies attribute data from team story to dashboard story
-                foreach (var item in story.Items)
+                else
                 {
-                    if (item.Category.Name == catName)
-                    {
-                        Item scItem = dashStory.Item_AddNew(item.Name);
-                        scItem.Category = dashStory.Category_FindByName(newCat);
-                        scItem.StartDate = Convert.ToDateTime(item.StartDate.ToString());
-                        scItem.DurationInDays = item.DurationInDays;
-                        double appBudget = item.GetAttributeValueAsDouble(story.Attribute_FindByName("Appropriated Budget"));
-                        double newBudget = item.GetAttributeValueAsDouble(story.Attribute_FindByName("New Requested Budget"));
-                        var RAG = item.GetAttributeValueAsText(story.Attribute_FindByName("RAG Status"));
-                        scItem.SetAttributeValue(dashStory.Attribute_FindByName("Appropriated Budget"), appBudget);
-                        scItem.SetAttributeValue(dashStory.Attribute_FindByName("New Requested Budget"), newBudget);
-                        scItem.SetAttributeValue(dashStory.Attribute_FindByName("RAG Status"), RAG);
-                    }
+                    Console.WriteLine("Budget not found in " + teamStory.Name); 
                 }
             }
-
+            // Goes through each roadmap to insert data into dashboard
+            Console.WriteLine("Saving Dashboard");
             dashStory.Save();
         }
-        void highCost(Story story, Story newStory)
+        static void highCost(Story story, Story newStory, bool isListed)
         {
             String catName = "";
             String newCat = "";
@@ -123,8 +87,10 @@ namespace SCDashboard
             // Copies attribute data from team story to dashboard story
             foreach (var item in story.Items)
             {
+                //if(item.getAttributeValueAsText("Attribute Check") !=null)
+                //  isListed = true;
                 double checkBudget = item.GetAttributeValueAsDouble(story.Attribute_FindByName("Appropriated Budget"));
-                if (item.Category.Name == catName && checkBudget > 500000)
+                if (item.Category.Name == catName && checkBudget > 1000000 || isListed == true)
                 {
                     Item scItem = newStory.Item_AddNew(item.Name);
                     scItem.Category = newStory.Category_FindByName(newCat);
