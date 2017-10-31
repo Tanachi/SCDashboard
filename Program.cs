@@ -17,7 +17,7 @@ namespace SCBackup
     {
         static void Main(string[] args)
         {
-            
+            // Load Data from App.config
             var fileLocation = Environment.CurrentDirectory.ToString() + "//Sheets";
             var userid = ConfigurationManager.AppSettings["user"];
             var passwd = ConfigurationManager.AppSettings["pass"];
@@ -29,20 +29,15 @@ namespace SCBackup
             StoryLite[] teamBook = null;
             SharpCloudApi sc = null;
             // Login and get story data from Sharpcloud
-            var filePath = System.IO.Directory.GetParent
-             (System.IO.Directory.GetParent(Environment.CurrentDirectory)
-             .ToString()).ToString() + "Hello.csv";
             sc = new SharpCloudApi(userid, passwd);
             Story dashStory = sc.LoadStory(getStory);
-            Story checkStory = sc.LoadStory(otherStory);
             teamBook = sc.StoriesTeam(team);
-	    // Goes through each story in the team
+            // Goes through each story in the team
             foreach (var teamStory in teamBook)
             {
-		//Default category is set to the exception
+                // Default case based off exception
                 String catName = "DME and O&M";
                 String newCat = "DOH";
-		// Check to see if story is a dashboard
                 MatchCollection matchdash = Regex.Matches(teamStory.Name, @"Dashboard|dashboard");
                 if (matchdash.Count == 0)
                 {
@@ -56,42 +51,49 @@ namespace SCBackup
                             catName = cat.Name;
                             String[] noProject = new String[catLine.Length - 1];
                             var storyLine = story.Name.Split(' ');
+                            // 1st case where first first word is all letters followed by IT
                             if (storyLine[1] == "IT")
                             {
                                 newCat = storyLine[0];
                             }
+                            // 2nd case where 3rd word is IT and will add the other 2 words as the category
                             else if (storyLine.Length > 2 && storyLine[2] == "IT")
                             {
                                 string Upperletter = storyLine[1].ToLower();
                                 newCat = storyLine[0] + " " + storyLine[1][0] + Upperletter.Substring(1);
                             }
-                            else if (storyLine[0] == "Department" && storyLine[1] != "Dashboard")
+                            // 3rd case where Department is the first word and Dashboard is not in the 2nd word
+                            else if (storyLine[0] == "Department")
                             {
                                 if (storyLine[3][0].ToString() == "&")
                                     newCat = storyLine[2][0].ToString() + "U" + storyLine[4][0].ToString();
                             }
                         }
+                        // Checks to see if the category is missing in dashboard
                         if (dashStory.Category_FindByName(newCat) == null)
                         {
                             dashStory.Category_AddNew(newCat);
                         }
                     }
+                    // Goes through each item in the stor
                     foreach (var item in story.Items)
                     {
-                        var itemLine = "";
                         // Checks to see if there's a bad item in the story
                         MatchCollection matchUrl = Regex.Matches(item.Name, @"Item \d+|(DELETE)|delete");
                         // checks for category if there's no category with projects
                         // Inserts item into dashboard
                         if (item.Category.Name == catName && matchUrl.Count == 0)
                         {
+                            // Array filled with selected columns
                             string[] columns = att.Split(',');
+                            // checks to see if item exists and will update the item if it does
                             Item newItem = null;
                             if (dashStory.Item_FindByName(item.Name) == null)
                                 newItem = dashStory.Item_AddNew(item.Name);
                             else
                                 newItem = dashStory.Item_FindByName(item.Name);
                             newItem.Category = dashStory.Category_FindByName(newCat);
+                            // check to see if there is description
                             if (item.Description != null && item.Description != "")
                             {
                                 newItem.Description = item.Description;
@@ -100,34 +102,35 @@ namespace SCBackup
                             {
                                 newItem.Description = "No Description Available";
                             }
+                            // Add defeault attributes from items
                             newItem.StartDate = Convert.ToDateTime(item.StartDate.ToString());
                             newItem.DurationInDays = item.DurationInDays;
-			    //Goes through the list of attributes in the config file and adds to items
+                            // Add in attributes 
                             foreach (string attr in columns)
                             {
                                 SC.API.ComInterop.Models.Attribute current = story.Attribute_FindByName(attr);
                                 SC.API.ComInterop.Models.Attribute dashCurrent = dashStory.Attribute_FindByName(attr);
+                                // Check to see if attribute is a number
                                 if (current.Type == SC.API.ComInterop.Models.Attribute.AttributeType.Numeric)
                                 {
                                     if (item.GetAttributeValueAsDouble(current) != null)
                                     {
                                         newItem.SetAttributeValue(dashCurrent, item.GetAttributeValueAsDouble(current));
                                     }
-                                    else
-                                    {
-                                        newItem.SetAttributeValue(dashCurrent, 0);
-                                    }
                                 }
-                                else if (current.Type == SC.API.ComInterop.Models.Attribute.AttributeType.Text || current.Type == SC.API.ComInterop.Models.Attribute.AttributeType.List)
+                                // Checks to see if attribute is text
+                                else if (current.Type == SC.API.ComInterop.Models.Attribute.AttributeType.Text 
+                                    || current.Type == SC.API.ComInterop.Models.Attribute.AttributeType.List)
                                 {
                                     if (item.GetAttributeValueAsText(current) != null && item.GetAttributeValueAsText(current).Count() != 0)
                                     {
                                         newItem.SetAttributeValue(dashCurrent, item.GetAttributeValueAsText(current));
                                     }
                                 }
-				// Adds tags to item
+                                // Add Tags to the story
                                 foreach (var tag in item.Tags)
                                 {
+                                    // Check to see if tag is in the story
                                     ItemTag oldTag = null;
                                     if (story.ItemTag_FindByName(tag.Text) != null)
                                         oldTag = story.ItemTag_FindByName(tag.Text);
@@ -136,6 +139,7 @@ namespace SCBackup
                                         dashTag = dashStory.ItemTag_AddNew(tag.Text);
                                     else
                                         dashTag = dashStory.ItemTag_FindByName(tag.Text);
+                                    // check to see if tag has a group
                                     if (oldTag != null && oldTag.Group != "")
                                         dashTag.Group = oldTag.Group;
                                     if (newItem.Tag_FindByName(tag.Text) == null)
