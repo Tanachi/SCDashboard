@@ -36,10 +36,13 @@ namespace SCBackup
             Story dashStory = sc.LoadStory(getStory);
             Story checkStory = sc.LoadStory(otherStory);
             teamBook = sc.StoriesTeam(team);
+	    // Goes through each story in the team
             foreach (var teamStory in teamBook)
             {
+		//Default category is set to the exception
                 String catName = "DME and O&M";
                 String newCat = "DOH";
+		// Check to see if story is a dashboard
                 MatchCollection matchdash = Regex.Matches(teamStory.Name, @"Dashboard|dashboard");
                 if (matchdash.Count == 0)
                 {
@@ -99,6 +102,7 @@ namespace SCBackup
                             }
                             newItem.StartDate = Convert.ToDateTime(item.StartDate.ToString());
                             newItem.DurationInDays = item.DurationInDays;
+			    //Goes through the list of attributes in the config file and adds to items
                             foreach (string attr in columns)
                             {
                                 SC.API.ComInterop.Models.Attribute current = story.Attribute_FindByName(attr);
@@ -121,6 +125,7 @@ namespace SCBackup
                                         newItem.SetAttributeValue(dashCurrent, item.GetAttributeValueAsText(current));
                                     }
                                 }
+				// Adds tags to item
                                 foreach (var tag in item.Tags)
                                 {
                                     ItemTag oldTag = null;
