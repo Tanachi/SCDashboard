@@ -1,16 +1,9 @@
 ﻿using System;
-using System.IO;
 using System.Configuration;
 using SC.API.ComInterop;
 using SC.API.ComInterop.Models;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using System.Net;
-using System.Threading;
-using OfficeOpenXml;
 using System.Linq;
-using System.Text;
-
 namespace SCBackup
 {
     class Program
@@ -18,14 +11,12 @@ namespace SCBackup
         static void Main(string[] args)
         {
             // Load Data from App.config
-            var fileLocation = Environment.CurrentDirectory.ToString() + "//Sheets";
             var userid = ConfigurationManager.AppSettings["user"];
             var passwd = ConfigurationManager.AppSettings["pass"];
             var team = ConfigurationManager.AppSettings["team"];
             var att = ConfigurationManager.AppSettings["att"];
             var getStory = ConfigurationManager.AppSettings["story"];
             var otherStory = ConfigurationManager.AppSettings["otherStory"];
-            var csvLine = "Name,Description,Category,Start,Duration," + att + ",Tags.ETS Priorities, Tags.Governor Priorities";
             StoryLite[] teamBook = null;
             SharpCloudApi sc = null;
             // Login and get story data from Sharpcloud
@@ -35,12 +26,13 @@ namespace SCBackup
             // Goes through each story in the team
             foreach (var teamStory in teamBook)
             {
-                // Default case based off exception
+                // Default case 
                 String catName = "DME and O&M";
                 String newCat = "DOH";
                 MatchCollection matchdash = Regex.Matches(teamStory.Name, @"Dashboard|dashboard");
                 if (matchdash.Count == 0)
                 {
+                   
                     Story story = sc.LoadStory(teamStory.Id);
                     foreach (var cat in story.Categories)
                     {
@@ -75,15 +67,20 @@ namespace SCBackup
                             dashStory.Category_AddNew(newCat);
                         }
                     }
-                    // Goes through each item in the stor
+                    // Goes through each item in the story
                     foreach (var item in story.Items)
                     {
                         // Checks to see if there's a bad item in the story
                         MatchCollection matchUrl = Regex.Matches(item.Name, @"Item \d+|(DELETE)|delete");
                         // checks for category if there's no category with projects
-                        // Inserts item into dashboard
                         if (item.Category.Name == catName && matchUrl.Count == 0)
                         {
+                            string check = item.GetAttributeValueAsText(story.Attribute_FindByName("Publish?"));
+                            if(check != null && check != "" && check == "No")
+                            {
+                                Console.WriteLine("Found a No");
+                                continue;
+                            }
                             // Array filled with selected columns
                             string[] columns = att.Split(',');
                             // checks to see if item exists and will update the item if it does
@@ -124,28 +121,29 @@ namespace SCBackup
                                 {
                                     if (item.GetAttributeValueAsText(current) != null && item.GetAttributeValueAsText(current).Count() != 0)
                                     {
+                                       
                                         newItem.SetAttributeValue(dashCurrent, item.GetAttributeValueAsText(current));
                                     }
-                                }
-                                // Add Tags to the story
-                                foreach (var tag in item.Tags)
+                                }                       
+                            }
+                            // Add Tags to the story
+                            foreach (var tag in item.Tags)
+                            {
+                                // Check to see if tag is in the story
+                                ItemTag oldTag = null;
+                                if (story.ItemTag_FindByName(tag.Text) != null)
+                                    oldTag = story.ItemTag_FindByName(tag.Text);
+                                ItemTag dashTag = null;
+                                if (dashStory.ItemTag_FindByName(tag.Text) == null)
+                                    dashTag = dashStory.ItemTag_AddNew(tag.Text);
+                                else
+                                    dashTag = dashStory.ItemTag_FindByName(tag.Text);
+                                // check to see if tag has a group
+                                if (oldTag != null && oldTag.Group != "")
+                                    dashTag.Group = oldTag.Group;
+                                if (newItem.Tag_FindByName(tag.Text) == null)
                                 {
-                                    // Check to see if tag is in the story
-                                    ItemTag oldTag = null;
-                                    if (story.ItemTag_FindByName(tag.Text) != null)
-                                        oldTag = story.ItemTag_FindByName(tag.Text);
-                                    ItemTag dashTag = null;
-                                    if (dashStory.ItemTag_FindByName(tag.Text) == null)
-                                        dashTag = dashStory.ItemTag_AddNew(tag.Text);
-                                    else
-                                        dashTag = dashStory.ItemTag_FindByName(tag.Text);
-                                    // check to see if tag has a group
-                                    if (oldTag != null && oldTag.Group != "")
-                                        dashTag.Group = oldTag.Group;
-                                    if (newItem.Tag_FindByName(tag.Text) == null)
-                                    {
-                                        newItem.Tag_AddNew(dashTag);
-                                    }
+                                    newItem.Tag_AddNew(dashTag);
                                 }
                             }
 
@@ -153,7 +151,6 @@ namespace SCBackup
                     }
                 }
             }
-            dashStory.Save();
         }
     }
 }
